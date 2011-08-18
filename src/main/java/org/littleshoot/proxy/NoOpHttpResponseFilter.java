@@ -8,7 +8,7 @@ import org.jboss.netty.handler.codec.http.HttpResponse;
  */
 public class NoOpHttpResponseFilter implements HttpResponseFilter {
 
-    public HttpResponse filterResponse(final HttpResponse response) {
+    public HttpResponse filterResponse(final HttpResponse response, String requestUri) {
         return response;
     }
 }

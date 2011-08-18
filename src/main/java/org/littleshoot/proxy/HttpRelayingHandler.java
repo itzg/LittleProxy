@@ -1,5 +1,7 @@
 package org.littleshoot.proxy;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -38,7 +40,7 @@ public class HttpRelayingHandler extends SimpleChannelUpstreamHandler {
 
     private final ChannelGroup channelGroup;
 
-    private final HttpFilter httpFilter;
+    private final Collection<HttpFilter> httpFilters;
 
     private HttpResponse originalHttpResponse;
 
@@ -54,6 +56,8 @@ public class HttpRelayingHandler extends SimpleChannelUpstreamHandler {
 
     private boolean closeEndsResponseBody;
 
+	private HttpFilter currentHttpFilter;
+
     /**
      * Creates a new {@link HttpRelayingHandler} with the specified connection
      * to the browser.
@@ -65,7 +69,7 @@ public class HttpRelayingHandler extends SimpleChannelUpstreamHandler {
     public HttpRelayingHandler(final Channel browserToProxyChannel, 
         final ChannelGroup channelGroup, 
         final RelayListener relayListener, final String hostAndPort) {
-        this (browserToProxyChannel, channelGroup, new NoOpHttpFilter(),
+        this (browserToProxyChannel, channelGroup, Collections.singletonList((HttpFilter)new NoOpHttpFilter()),
             relayListener, hostAndPort);
     }
     
@@ -75,15 +79,15 @@ public class HttpRelayingHandler extends SimpleChannelUpstreamHandler {
      * 
      * @param browserToProxyChannel The browser connection.
      * @param channelGroup Keeps track of channels to close on shutdown.
-     * @param filter The HTTP filter.
+     * @param hostFilters The HTTP filter.
      * @param hostAndPort Host and port we're relaying to.
      */
     public HttpRelayingHandler(final Channel browserToProxyChannel,
-        final ChannelGroup channelGroup, final HttpFilter filter,
+        final ChannelGroup channelGroup, final Collection<HttpFilter> hostFilters,
         final RelayListener relayListener, final String hostAndPort) {
         this.browserToProxyChannel = browserToProxyChannel;
         this.channelGroup = channelGroup;
-        this.httpFilter = filter;
+        this.httpFilters = hostFilters;
         this.relayListener = relayListener;
         this.hostAndPort = hostAndPort;
     }
@@ -155,11 +159,7 @@ public class HttpRelayingHandler extends SimpleChannelUpstreamHandler {
                 writeEndBuffer = true;
             }
             
-            final HttpResponse filtered = 
-                this.httpFilter.filterResponse(response);
-            messageToWrite = filtered;
-            
-            // An HTTP response is associated with a single request, so we
+			// An HTTP response is associated with a single request, so we
             // can pop the correct request off the queue.
             // 
             // TODO: I'm a little unclear as to when the request queue would
@@ -168,11 +168,30 @@ public class HttpRelayingHandler extends SimpleChannelUpstreamHandler {
             // access control on local networks, likely related to redirects.
             if (!this.requestQueue.isEmpty()) {
                 this.currentHttpRequest = this.requestQueue.remove();
+                this.currentHttpFilter = null;
                 if (this.currentHttpRequest == null) {
-                    log.warn("Got null HTTP request object.");
+                	log.warn("Got null HTTP request object.");
+                }
+                else {
+	                for (HttpFilter filter : httpFilters) {
+						if (filter.shouldFilterResponses(currentHttpRequest)) {
+							this.currentHttpFilter = filter;
+							break;
+						}
+					}
                 }
             } else {
                 log.info("Request queue is empty!");
+            }
+            
+            if (this.currentHttpFilter != null) {
+				final HttpResponse filtered = this.currentHttpFilter
+						.filterResponse(response,
+								this.currentHttpRequest != null ? this.currentHttpRequest.getUri() : null);
+				messageToWrite = filtered;
+			}
+            else {
+            	messageToWrite = response;
             }
         } else {
             log.info("Processing a chunk");

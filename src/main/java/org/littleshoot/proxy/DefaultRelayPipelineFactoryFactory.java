@@ -1,5 +1,6 @@
 package org.littleshoot.proxy;
 
+import java.util.Collection;
 import java.util.Map;
 
 import org.jboss.netty.channel.Channel;
@@ -11,13 +12,13 @@ public class DefaultRelayPipelineFactoryFactory
     implements RelayPipelineFactoryFactory {
     
     private String chainProxyHostAndPort;
-    private Map<String, HttpFilter> filters;
+    private Map<String, Collection<HttpFilter>> filters;
     private ChannelGroup channelGroup;
     private HttpRequestFilter requestFilter;
 
     public DefaultRelayPipelineFactoryFactory(
         final String chainProxyHostAndPort, 
-        final Map<String, HttpFilter> filters, HttpRequestFilter requestFilter, 
+        final Map<String, Collection<HttpFilter>> filters, HttpRequestFilter requestFilter, 
         final ChannelGroup channelGroup) {
         this.chainProxyHostAndPort = chainProxyHostAndPort;
         this.filters = filters;

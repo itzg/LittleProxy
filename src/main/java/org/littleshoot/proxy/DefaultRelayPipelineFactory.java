@@ -2,6 +2,7 @@ package org.littleshoot.proxy;
 
 import static org.jboss.netty.channel.Channels.pipeline;
 
+import java.util.Collection;
 import java.util.Map;
 
 import org.jboss.netty.channel.Channel;
@@ -30,7 +31,7 @@ public class DefaultRelayPipelineFactory implements ChannelPipelineFactory {
     private final Channel browserToProxyChannel;
 
     private final ChannelGroup channelGroup;
-    private final Map<String, HttpFilter> filters;
+    private final Map<String, Collection<HttpFilter>> filters;
     private final HttpRequestFilter requestFilter;
     private String chainProxyHostAndPort;
     private final boolean filtersOff;
@@ -39,7 +40,7 @@ public class DefaultRelayPipelineFactory implements ChannelPipelineFactory {
     public DefaultRelayPipelineFactory(final String hostAndPort, 
         final HttpRequest httpRequest, final RelayListener relayListener, 
         final Channel browserToProxyChannel,
-        final ChannelGroup channelGroup, final Map<String, HttpFilter> filters, 
+        final ChannelGroup channelGroup, final Map<String, Collection<HttpFilter>> filters, 
         final HttpRequestFilter requestFilter, 
         final String chainProxyHostAndPort) {
         this.hostAndPort = hostAndPort;
@@ -72,20 +73,17 @@ public class DefaultRelayPipelineFactory implements ChannelPipelineFactory {
             new HttpResponseDecoder(8192, 8192*2, 8192*2));
         
         LOG.debug("Querying for host and port: {}", hostAndPort);
-        final boolean shouldFilter;
-        final HttpFilter filter;
-        if (filtersOff) {
-            shouldFilter = false;
-            filter = null;
-        } else {
-            filter = filters.get(hostAndPort);
-            if (filter == null) {
+        boolean shouldFilter = false;
+        final Collection<HttpFilter> hostFilters = filters.get(hostAndPort);
+        HttpFilter filter = null;
+        if (!filtersOff) {
+            if (hostFilters == null) {
                 LOG.info("Filter not found in: {}", filters);
                 shouldFilter = false;
             }
             else {
-                LOG.debug("Using filter: {}", filter);
-                shouldFilter = filter.shouldFilterResponses(httpRequest);
+            	shouldFilter = true;
+            	filter = hostFilters.iterator().next();
             }
             LOG.debug("Filtering: "+shouldFilter);
         }
@@ -107,7 +105,7 @@ public class DefaultRelayPipelineFactory implements ChannelPipelineFactory {
         final HttpRelayingHandler handler;
         if (shouldFilter) {
             handler = new HttpRelayingHandler(browserToProxyChannel, 
-                channelGroup, filter, relayListener, hostAndPort);
+                channelGroup, hostFilters, relayListener, hostAndPort);
         } else {
             handler = new HttpRelayingHandler(browserToProxyChannel, 
                 channelGroup, relayListener, hostAndPort);
@@ -137,6 +135,7 @@ public class DefaultRelayPipelineFactory implements ChannelPipelineFactory {
                 writeTimeoutSeconds, 0));
         pipeline.addLast("idleAware", new IdleAwareHandler());
         pipeline.addLast("handler", handler);
+        pipeline.getContext(handler).setAttachment(httpRequest.getUri());
         return pipeline;
     }
 }

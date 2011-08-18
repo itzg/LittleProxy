@@ -12,7 +12,7 @@ public class NoOpHttpFilter implements HttpFilter {
         return false;
     }
 
-    public HttpResponse filterResponse(HttpResponse response) {
+    public HttpResponse filterResponse(HttpResponse response, String requestUri) {
         return response;
     }
 
